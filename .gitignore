@@ -1,2 +1,4 @@
-node_modules
+**/node_modules
 .env
+**/utils
+package-lock.json

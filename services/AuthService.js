@@ -30,6 +30,8 @@ exports.Register = function (body, callback) {
         Value: phoneNumber
     }));
 
+    console.log(email, password, attributeList)
+
     userPool.signUp(email, password, attributeList, null, function (err, result) {
         if (err) {
             return callback(err);
@@ -58,11 +60,12 @@ exports.Login = function (body, callback) {
     const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
     cognitoUser.authenticateUser(authenticationDetails, {
         onSuccess: function (result) {
-            console.log('access token + ' + result.getAccessToken().getJwtToken());
-            console.log('id token + ' + result.getIdToken().getJwtToken());
-            console.log('refresh token + ' + result.getRefreshToken().getToken());
             const accesstoken = result.getAccessToken().getJwtToken();
-            callback(null, accesstoken);
+            const IdentityToken = result.getIdToken().getJwtToken()
+            callback(null, {
+                accesstoken,
+                IdentityToken
+            });
         },
         onFailure: (function (err) {
             callback(err);
