@@ -2,3 +2,4 @@
 .env
 **/utils
 package-lock.json
+**/uploads

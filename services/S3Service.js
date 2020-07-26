@@ -1,8 +1,9 @@
 global.fetch = require('node-fetch');
 global.navigator = () => null;
 const AWS = require('aws-sdk');
-const fs = require("fs")
-const path = require("path")
+const multer = require('multer');
+const fs = require("fs");
+const path = require("path");
 const AmazonCognitoIdentity = require('amazon-cognito-identity-js');
 const {
     S3BucketName,
@@ -19,90 +20,38 @@ const ClientId = cognitoClientID;
 const IdentityPoolId = IdentityPoolID;
 
 
-// const login = () => {
-//     try {
-//         var authenticationData = {
-//             Username: 'shivadwivediit@gmail.com',
-//             Password: 'Password@1234',
-//         };
-//         var authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
-//         var poolData = {
-//             UserPoolId: UserPoolId,
-//             ClientId: ClientId
-//         };
-//         var userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
-//         var userData = {
-//             Username: 'shivadwivediit1@gmail.com',
-//             Pool: userPool
-//         };
-//         var cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
-//         cognitoUser.authenticateUser(authenticationDetails, {
-//             onSuccess: function (result) {
-//                 var accessToken = result.getAccessToken().getJwtToken();
-//                 // console.log(result.getIdToken()['payload']['sub'])
-//                 /* Use the idToken for Logins Map when Federating User Pools with identity pools or when passing through an Authorization Header to an API Gateway Authorizer */
-//                 var idToken = result.idToken.jwtToken;
-//                 var identityId = ''
-//                 // console.log(result.getAccessToken().getJwtToken())
-//                 AWS.config.region = 'eu-central-1';
-//                 AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-//                     IdentityPoolId: IdentityPoolId,
-//                     Logins: {
-//                         'cognito-idp.eu-central-1.amazonaws.com/eu-central-1_8CA7GNjpS': result.getIdToken().getJwtToken()
-//                     }
-//                 });
-//                 AWS.config.credentials.get(function () {
-//                     // console.log(res)
-//                     // Credentials will be available when this function is called.
-//                     var accessKeyId = AWS.config.credentials.accessKeyId;
-//                     var secretAccessKey = AWS.config.credentials.secretAccessKey;
-//                     var sessionToken = AWS.config.credentials.sessionToken;
-//                     identityId = AWS.config.credentials.identityId;
-//                     console.log(AWS.config.credentials)
-//                     s3UploadFile({
-//                         'credentials': AWS.config.credentials,
-//                         'access': 'private'
-//                     })
-//                 });
-//             },
-//             onFailure: function (err) {
-//                 console.log(err);
-//                 AWS.config.region = 'eu-central-1';
-//                 AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-//                     IdentityPoolId: IdentityPoolId
-//                 });
-//                 AWS.config.credentials.get(function () {
-//                     // console.log(res)
-//                     // Credentials will be available when this function is called.
+var storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, path.join(__dirname, '../uploads/'));
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.fieldname + '-' + Date.now() + '.' + file.originalname.split('.')[file.originalname.split('.').length - 1])
+    }
+})
 
-//                     identityId = AWS.config.credentials.identityId;
-//                     console.log(AWS.config.credentials)
-//                     s3UploadFile({
-//                         'credentials': AWS.config.credentials,
-//                         'access': 'public'
-//                     })
-//                 });
-//             },
+var upload = multer({
+    storage: storage,
+    filefilter: function (req, file, callback) {
+        if (['png', 'jpeg', 'jpg'].indexOf(file.originalname.split('.')[file.originalname.split('.').length - 1]) === -1) {
+            return callback(new Error('wrong extension type'));
+        }
+        callback(null, true);
+    }
+}).single('profile_pic');
 
-//         });
-
-//     } catch (error) {
-//         console.log(error)
-//     }
-// }
-
-
-exports.getIdentityCredentials = (options = {}) => {
+exports.getIdentityCredentials = (options = {}, callback) => {
     const methodName = ' [getIdentityCredentials] '
     try {
         let access = 'public';
+        const body = options['body'];
+        const headers = options['headers'];
         AWS.config.region = 'eu-central-1';
         let cognitoIdentityCredentialsObj = {
             IdentityPoolId: IdentityPoolId
         };
-        if (options['IdentityToken']) {
+        if (headers['identitytoken']) {
             cognitoIdentityCredentialsObj['Logins'] = {
-                'cognito-idp.eu-central-1.amazonaws.com/eu-central-1_8CA7GNjpS': options['IdentityToken']
+                'cognito-idp.eu-central-1.amazonaws.com/eu-central-1_8CA7GNjpS': headers['identitytoken']
             };
             access = 'private';
         }
@@ -114,17 +63,30 @@ exports.getIdentityCredentials = (options = {}) => {
             // var secretAccessKey = AWS.config.credentials.secretAccessKey;
             // var sessionToken = AWS.config.credentials.sessionToken;
             // identityId = AWS.config.credentials.identityId;
-            console.log(AWS.config.credentials);
-            s3UploadFile({
-                'access': access
-            });
+            console.log('congnito identity creds =====', AWS.config.credentials);
+            upload(options, null, (err) => {
+                if (err) {
+                    return callback(err);
+                }
+                s3UploadFile({
+                    'filePath': options.file.path,
+                    'access': access,
+                    'credentials': AWS.config.credentials
+                }, (err, data) => {
+                    if (err) {
+                        return callback(err);
+                    }
+                    callback(null, data)
+                });
+            })
         });
     } catch (error) {
         console.log(methodName, error)
     }
 }
 
-const s3UploadFile = (options = {}) => {
+
+const s3UploadFile = (options = {}, callback) => {
     try {
         let bucketAccess = options['access'];
         let clientParams = {
@@ -138,28 +100,19 @@ const s3UploadFile = (options = {}) => {
 
         s3 = new AWS.S3(clientParams);
         // console.log(s3)
-        // s3 = new AWS.S3({
-        //     credentials: options['credentials'],
-        //     region: options['region'],
-        //     apiVersion: '2012-10-17',
-        //     Bucket: bucketName
-        // })
-        // console.log(options['identityId'].split(":")[1])
-        // call S3 to retrieve upload file to specified bucket
-
         var uploadParams = {
             Key: '',
             Body: '',
             ACL: 'private',
             Bucket: bucketName
         }
-        var file = path.join(__dirname, "../utils/intro-bg.jpg");
-
+        var file = options['filePath'];
+        // console.log("options ======", options)
         // Configure the file stream and obtain the upload parameters
 
         var fileStream = fs.createReadStream(file);
         fileStream.on('error', function (err) {
-            console.log('File Error', err);
+            callback(err);
         })
         uploadParams.Body = fileStream;
         if (bucketAccess === 'private')
@@ -168,16 +121,15 @@ const s3UploadFile = (options = {}) => {
             // uploadParams.ACL = 'public';
             uploadParams.Key = 'public/' + path.basename(file);
         }
-        console.log(bucketName + uploadParams.Key);
-        console.log(uploadParams);
         // call S3 to retrieve upload file to specified bucket
         s3.putObject(uploadParams, function (err, data) {
             if (err) {
                 console.log("Error", err);
+                callback(err);
             }
             if (data) {
                 console.log("Upload Success", data);
-                return data;
+                callback(null, data);
             }
         })
     } catch (error) {

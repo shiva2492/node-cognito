@@ -1,7 +1,7 @@
 var s3Service = require('../Services/S3Service');
 
 exports.uploadProfile = function (req, res) {
-    let register = s3Service.getIdentityCredentials(req.body, function (err, result) {
+    let register = s3Service.getIdentityCredentials(req, function (err, result) {
         if (err)
             return res.send(err);
         res.send(result);

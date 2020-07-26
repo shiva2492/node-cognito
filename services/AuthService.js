@@ -30,7 +30,7 @@ exports.Register = function (body, callback) {
         Value: phoneNumber
     }));
 
-    console.log(email, password, attributeList)
+    console.log(email, password, attributeList);
 
     userPool.signUp(email, password, attributeList, null, function (err, result) {
         if (err) {
